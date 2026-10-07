@@ -289,6 +289,55 @@ def frontera_eficiente(mu, cov, n_puntos: int = 40, cortos: bool = False, w_max:
 
 
 # ============================================================
+# Semana 9: CAPM, SML y modelos multifactoriales
+# ============================================================
+
+def alfa_capm(retorno_esperado: float, rf: float, beta: float, erp: float) -> float:
+    """Alfa respecto de la SML: retorno esperado (o pronosticado) menos el exigido por el CAPM.
+
+    Positivo: el activo esta por encima de la SML (subvaluado segun el CAPM).
+    """
+    return retorno_esperado - capm(rf, beta, erp)
+
+
+def descomponer_riesgo(beta: float, sigma_mercado: float, sigma_activo: float) -> dict:
+    """Parte la varianza de un activo en sistematica (beta^2 x var del mercado) e idiosincratica.
+
+    Devuelve las dos volatilidades, la fraccion sistematica (el R2 de la regresion
+    contra el mercado) y la correlacion implicita con el mercado.
+    """
+    var_sis = (beta * sigma_mercado) ** 2
+    var_idio = sigma_activo ** 2 - var_sis
+    if var_idio < 0:
+        raise ValueError("Insumos incoherentes: la varianza sistematica supera a la total.")
+    return {"sigma_sistematica": abs(beta) * sigma_mercado, "sigma_idiosincratica": float(np.sqrt(var_idio)),
+            "r2": var_sis / sigma_activo ** 2, "correlacion": beta * sigma_mercado / sigma_activo}
+
+
+def retorno_multifactor(rf: float, betas, primas) -> float:
+    """Retorno exigido por un modelo de factores (APT): rf + suma de beta_k x prima_k."""
+    return rf + float(np.dot(np.asarray(betas, dtype=float), np.asarray(primas, dtype=float)))
+
+
+def regresion_factores(exceso: pd.Series, factores: pd.DataFrame, anualizar_por: int = 12) -> pd.Series:
+    """Regresion de series de tiempo de un retorno en exceso contra uno o mas factores (MCO).
+
+    Devuelve alfa anualizado, su estadistico t, una beta por factor (con su t), el R2
+    y el numero de observaciones. Alinea las fechas de ambos insumos.
+    """
+    import statsmodels.api as sm
+    datos = pd.concat([exceso.rename("y"), factores], axis=1, join="inner").dropna()
+    modelo = sm.OLS(datos["y"], sm.add_constant(datos[factores.columns])).fit()
+    salida = {"alfa_anual": modelo.params["const"] * anualizar_por, "t_alfa": modelo.tvalues["const"]}
+    for k in factores.columns:
+        salida[f"b_{k}"] = modelo.params[k]
+        salida[f"t_{k}"] = modelo.tvalues[k]
+    salida["r2"] = modelo.rsquared
+    salida["n"] = int(modelo.nobs)
+    return pd.Series(salida)
+
+
+# ============================================================
 # Retornos y utilidades básicas
 # ============================================================
 
